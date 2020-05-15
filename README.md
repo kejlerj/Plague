@@ -1,0 +1,2 @@
+# Plague
+Study project - Ransomware
