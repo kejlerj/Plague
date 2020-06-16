@@ -3,7 +3,7 @@
 
 void print_hex(const unsigned char *str, unsigned int size)
 {
-    int i = 0;
+    unsigned int i = 0;
 
     while (i < size)
     {

