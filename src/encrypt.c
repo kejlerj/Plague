@@ -2,6 +2,36 @@
 
 #include "includes/plague.h"
 
+RSA *createRSA(unsigned char *key, int public)
+{
+    RSA *rsa = RSA_new();
+    BIO *keybio;
+
+    keybio = BIO_new_mem_buf(key,  -1);
+    if (keybio == NULL)
+        return 0;
+    if (public)
+        rsa = PEM_read_bio_RSA_PUBKEY(keybio, &rsa, NULL, NULL);
+    else
+        rsa = PEM_read_bio_RSAPrivateKey(keybio, &rsa,NULL, NULL);
+    return rsa;
+}
+
+unsigned char *rsa_encode(unsigned char *json, size_t *len)
+{
+    unsigned char *data;
+    RSA *rsa;
+    char pub[] = "MY_PUB_KEY";
+
+    rsa  = createRSA((unsigned char *)pub, 1);
+    if (!(data = malloc(RSA_size(rsa))))
+        exit(0);
+    *len = RSA_public_encrypt((int)strlen((char *)json), json, data, rsa, RSA_PKCS1_PADDING);
+    RSA_free(rsa);
+    if (*len > 0)
+        return data;
+    return NULL;
+}
 
 int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key,
             unsigned char *iv, unsigned char *ciphertext)

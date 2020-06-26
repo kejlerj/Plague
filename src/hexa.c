@@ -30,6 +30,25 @@ char *encode_hex(const unsigned char *key, int size)
     return hex;
 }
 
+char *bin2hex(const unsigned char *bin, size_t len)
+{
+    char   *out;
+    size_t  i;
+
+    if (bin == NULL || len == 0)
+        return NULL;
+
+    out = malloc(len*2+1);
+    for (i=0; i<len; i++) {
+        out[i*2]   = "0123456789abcdef"[bin[i] >> 4];
+        out[i*2+1] = "0123456789abcdef"[bin[i] & 0x0F];
+    }
+    out[len*2] = '\0';
+
+    return out;
+}
+
+
 unsigned char    *decode_hex(char *hex, int size)
 {
     unsigned char *decoded_key;
