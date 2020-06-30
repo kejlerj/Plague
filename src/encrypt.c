@@ -21,7 +21,7 @@ unsigned char *rsa_encode(unsigned char *json, size_t *len)
 {
     unsigned char *data;
     RSA *rsa;
-    char pub[] = "MY_PUB_KEY";
+    char pub[] = "MY_PUBLIC_KEY";
 
     rsa  = createRSA((unsigned char *)pub, 1);
     if (!(data = malloc(RSA_size(rsa))))
