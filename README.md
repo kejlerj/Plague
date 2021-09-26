@@ -7,6 +7,12 @@
 - The Ransomware send a request to the C&C with the AES key and some other victim informations (IP, MAC, hostname, location).
 - This request is encrypted with RSA 4096 algorithm (asymetric encryption).
 
+## Installation Steps
+Compile the Ransomware files.
+```
+gcc src/* -I. -lcrypto -g3 -o plague
+```
+
 ## 💻 Build With
 The technologies used in this project are :
 - C
